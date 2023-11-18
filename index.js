@@ -87,7 +87,7 @@ app.post('/sign-in', async (req, res) => {
         // })
     }
     catch(err) {
-        res.status(500).send({message: 'Server error'});
+        res.status(500).send({message: 'Server error', errObj: err});
     }
 });
 
@@ -107,7 +107,7 @@ app.post('/otp-verify', async (req, res) => {
         }
     }
     catch(err) {
-        return res.status(500).send({message: 'Server error'});
+        return res.status(500).send({message: 'Server error', errObj: err});
     }
 });
 
@@ -134,7 +134,7 @@ app.get('/me', async (req, res) => {
         }
     }
     catch(err) {
-        return res.status(500).send({message: 'Server error'});
+        return res.status(500).send({message: 'Server error', errObj: err});
     }
 });
 
