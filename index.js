@@ -1,5 +1,4 @@
 import express from 'express';
-import nodemailer from 'nodemailer';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
@@ -10,6 +9,7 @@ import { Order } from './models/orderModel.js';
 import { generateOTP, createJwtToken, verifyJwtToken } from './utils.js';
 import { price } from './data/price.js';
 import { UserDetail } from './models/userDetailModel.js';
+import sendMail from './helper.js';
 
 const port = process.env.PORT | 5555;
 
@@ -33,28 +33,7 @@ mongoose.connect(process.env.MONGO_DB_URL)
 })
 
 app.post('/email', (req, res) => {
-    var transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: 'barathkumarv98@gmail.com',
-            pass: process.env.GMAIL_APP_PASSWORD,
-        }
-    });
-      
-    var mailOptions = {
-        from: 'barathkumarv98@gmail.com',
-        to: req.body.toEmail,
-        subject: req.body.subject,
-        text: req.body.emailContent,
-    };
-      
-    transporter.sendMail(mailOptions, function(error){
-        if (error) {
-            return res.status(500);
-        } else {
-            return res.status(200).send('email sent');
-        }
-    });
+    return sendMail(req.body.toEmail, req.body.subject, req.body.emailContent, res);
 });
 
 app.post('/sign-in', async (req, res) => {
@@ -146,7 +125,7 @@ app.get('/cart', async (req, res) => {
         }
 
         const token = header.split("Bearer ")[1]
-        if (!token || token === undefined) {
+        if (!token) {
             return res.status(400).send({ message: 'Auth token missing' });
         }
 
@@ -167,14 +146,13 @@ app.get('/cart', async (req, res) => {
                 id: cartItem.itemId,
                 billingName: cartItem.billingName,
                 quantity: cartItem.quantity,
-                question: cartItem.question,
-                cd: cartItem.cd,
-                price: selectedItem[0].price + (cartItem.question && selectedItem[0].question) + (cartItem.cd && selectedItem[0].cd),
+                question: cartItem?.question || false,
+                cd: cartItem?.cd || false,
+                price: selectedItem[0].price + (cartItem?.question ? selectedItem[0].question : 0) + (cartItem?.cd ? selectedItem[0].cd : 0),
             };
             newCart.push(modifiedItem);
         }
         return res.status(200).send({ cart: newCart });
-
     }
     catch(err) {
         return res.status(500).send({message: 'Server error'});
@@ -220,11 +198,10 @@ app.post('/cart/update', async (req, res) => {
             await Cart.create({ userId, cartItems: [{ itemId: req.body.itemId, billingName: req.body.name, quantity: req.body.quantity, question: req.body.question, cd: req.body.cd }]})
         }
         
-        console.time('latency');
         const cart = await Cart.findOne({ userId: userId });
         if (!cart)
             return res.status(200).send({ cart: [] });
-        console.timeEnd('latency');
+
         let newCart = [];
         for (let cartItem of cart.cartItems) {
             const selectedItem = price.filter(item => {return item.id === cartItem.itemId; });
@@ -232,9 +209,9 @@ app.post('/cart/update', async (req, res) => {
                 id: cartItem.itemId,
                 billingName: cartItem.billingName,
                 quantity: cartItem.quantity,
-                question: cartItem.question,
-                cd: cartItem.cd,
-                price: selectedItem[0].price + (cartItem.question && selectedItem[0].question) + (cartItem.cd && selectedItem[0].cd),
+                question: cartItem?.question || false,
+                cd: cartItem?.cd || false,
+                price: selectedItem[0].price + (cartItem?.question ? selectedItem[0].question : 0) + (cartItem?.cd ? selectedItem[0].cd : 0),
             };
             newCart.push(modifiedItem);
         }
@@ -242,7 +219,6 @@ app.post('/cart/update', async (req, res) => {
         return res.status(200).send({ message: 'Added successfully', cart: newCart });
     }
     catch(err) {
-        console.log('error', err);
         return res.status(500).send({message: 'Server error'});
     }
 });
@@ -287,9 +263,9 @@ app.post('/cart/remove', async(req, res) => {
                 id: cartItem.itemId,
                 billingName: cartItem.billingName,
                 quantity: cartItem.quantity,
-                question: cartItem.question,
-                cd: cartItem.cd,
-                price: selectedItem[0].price + (cartItem.question && selectedItem[0].question) + (cartItem.cd && selectedItem[0].cd),
+                question: cartItem?.question || false,
+                cd: cartItem?.cd || false,
+                price: selectedItem[0].price + (cartItem?.question ? selectedItem[0].question : 0) + (cartItem?.cd ? selectedItem[0].cd : 0),
             };
             newCart.push(modifiedItem);
         }
@@ -319,15 +295,15 @@ app.post('/order', async(req, res) => {
             return res.status(400).send({ message: 'User not available' });
         }
 
-        const { name, address, city, pincode, district, state, secContact, transport, orderItems } = req.body;
+        const { name, address, city, pincode, district, state, secContactNum, transport, orderItems, mobileNumber } = req.body;
         if (!name || !address || !city || !orderItems?.length)
             return res.status(400).send({ message: 'Data insuffiency' });
 
         const existingUserDetail = await UserDetail.findOne({ userId: userId });
         if (existingUserDetail)
-            await UserDetail.updateOne({ userId: userId }, {$set:{name: name, address: address, city: city, pincode: pincode, district: district, state: state, secContact}});
+            await UserDetail.updateOne({ userId: userId }, {$set:{name: name, address: address, city: city, pincode: pincode, district: district, state: state, secContactNum: secContactNum, transport: transport}});
         else
-            await UserDetail.create({ userId, name, address, city, pincode, district, state, secContact: secContact || '', transport: transport || '' });
+            await UserDetail.create({ userId, name, address, city, pincode, district, state, secContactNum: secContactNum || '', transport: transport || '' });
 
         let modifiedCartItems = [];
         let totalValue = 0;
@@ -337,9 +313,9 @@ app.post('/order', async(req, res) => {
                 itemId: orderItem.id,
                 billingName: orderItem.billingName,
                 quantity: orderItem.quantity,
-                question: orderItem.question,
-                cd: orderItem.cd,
-                price: selectedItem[0].price + (orderItem.question && selectedItem[0].question) + (orderItem.cd && selectedItem[0].cd),
+                question: orderItem?.question || false,
+                cd: orderItem?.cd || false,
+                price: selectedItem[0].price + (orderItem?.question ? selectedItem[0].question : 0) + (orderItem?.cd ? selectedItem[0].cd : 0),
             }
             totalValue += modifiedItem.quantity * modifiedItem.price;
             modifiedCartItems.push(modifiedItem);
@@ -347,12 +323,28 @@ app.post('/order', async(req, res) => {
         const order = await Order.create({ userId: userId, cartItems: modifiedCartItems, totalValue: totalValue });
         if (order) {
             await Cart.deleteOne({ userId: userId });
+            let printedItems = '';
+            for (let item of modifiedCartItems) {
+                printedItems += `${item.billingName}  ${item.question ? ' + Question' : ''}  ${item.cd ? ' + CD' : ''} -  ${item.quantity} \n`;
+            }
+            const orderContent = `
+                name: ${name},\n
+                address: ${address},\n
+                city: ${city},\n
+                pincode: ${pincode},\n
+                district: ${district},\n
+                state: ${state},\n
+                mobileNumber: ${mobileNumber},\n
+                sec Contact: ${secContactNum},\n
+                transport: ${transport},\n
+                order items: \n ${printedItems}
+            `
+            sendMail('barathkumarv98@gmail.com', 'Order creation', orderContent)
             return res.status(200).send({ message: 'Ordered successfully' });
         }
         return res.status(400).send({ message: 'Ordering failed' });
     }
     catch(err) {
-        console.log('err', err);
         return res.status(500).send({message: 'Server error'});
     }
 });
