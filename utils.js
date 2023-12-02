@@ -1,5 +1,5 @@
-import fetch from 'node-fetch';
 import jwt from 'jsonwebtoken';
+import fetch from 'node-fetch';
 
 export const generateOTP = (otp_length) => {
   var digits = "0123456789";

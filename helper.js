@@ -1,6 +1,4 @@
 import nodemailer from 'nodemailer';
-import { User } from './models/userModel.js';
-import { verifyJwtToken } from './utils.js';
 
 const sendMail = (toEmail, subject, emailContent, res) => {
     var transporter = nodemailer.createTransport({
